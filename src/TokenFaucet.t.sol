@@ -13,16 +13,16 @@ contract TokenFaucetTest is DSTest {
         faucet = new TokenFaucet();
         token = new DSToken("TEST");
         token.mint(address(faucet), 1000000);
-        faucet.setAmt(address(token), 20);
+        faucet.setAllocatedAmount(address(token), 20);
     }
 
-    function test_gulp() public {
+    function test_requestTokens() public {
         assertEq(token.balanceOf(address(this)), 0);
-        faucet.gulp(address(token));
+        faucet.requestTokens(address(token));
         assertEq(token.balanceOf(address(this)), 20);
     }
 
-    function test_gulp_multiple() public {
+    function test_requestTokens_multiple() public {
         assertEq(token.balanceOf(address(123)), 0);
         assertEq(token.balanceOf(address(234)), 0);
         assertEq(token.balanceOf(address(567)), 0);
@@ -32,25 +32,25 @@ contract TokenFaucetTest is DSTest {
         addrs[1] = address(234);
         addrs[2] = address(567);
         addrs[3] = address(890);
-        faucet.gulp(address(token), addrs);
+        faucet.requestTokens(address(token), addrs);
         assertEq(token.balanceOf(address(123)), 20);
         assertEq(token.balanceOf(address(234)), 20);
         assertEq(token.balanceOf(address(567)), 20);
         assertEq(token.balanceOf(address(890)), 20);
     }
 
-    function testFail_gulp_multiple() public {
-        faucet.gulp(address(token));
+    function testFail_request_tokens_multiple() public {
+        faucet.requestTokens(address(token));
         address[] memory addrs = new address[](4);
         addrs[0] = address(this);
         addrs[1] = address(234);
         addrs[2] = address(567);
         addrs[3] = address(890);
-        faucet.gulp(address(token), addrs);
+        faucet.requestTokens(address(token), addrs);
     }
 
-    function testFail_gulp_twice() public {
-        faucet.gulp(address(token));
-        faucet.gulp(address(token));
+    function testFail_request_tokens_twice() public {
+        faucet.requestTokens(address(token));
+        faucet.requestTokens(address(token));
     }
 }

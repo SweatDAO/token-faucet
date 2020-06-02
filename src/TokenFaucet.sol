@@ -17,53 +17,67 @@
 
 pragma solidity >=0.5.0;
 
-import "./lib.sol";
+import "./Logging.sol";
 
 interface ERC20Like {
     function balanceOf(address) external view returns (uint256);
     function transfer(address,uint256) external; // return bool?
 }
 
-contract TokenFaucet is DSNote {
+contract TokenFaucet is Logging {
     // --- Auth ---
-    mapping (address => uint256) public wards;
-    function rely(address guy) public auth note { wards[guy] = 1; }
-    function deny(address guy) public auth note { wards[guy] = 0; }
-    modifier auth { require(wards[msg.sender] == 1); _; }
+    mapping (address => uint) public authorizedAccounts;
+    /**
+     * @notice Add auth to an account
+     * @param account Account to add auth to
+     */
+    function addAuthorization(address account) external emitLog isAuthorized { authorizedAccounts[account] = 1; }
+    /**
+     * @notice Remove auth from an account
+     * @param account Account to remove auth from
+     */
+    function removeAuthorization(address account) external emitLog isAuthorized { authorizedAccounts[account] = 0; }
+    /**
+    * @notice Checks whether msg.sender can call an authed function
+    **/
+    modifier isAuthorized {
+        require(authorizedAccounts[msg.sender] == 1, "TokenFaucet/account-not-authorized");
+        _;
+    }
 
-    mapping (address => uint256) public amt;
-    mapping (address => mapping (address => bool)) public done;
+    mapping (address => uint256) public allocatedAmount;
+    mapping (address => mapping (address => bool)) public claimed;
 
     constructor () public {
-        wards[msg.sender] = 1;
+        authorizedAccounts[msg.sender] = 1;
     }
 
     function mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require(y == 0 || (z = x * y) / y == x);
     }
 
-    function gulp(address gem) external {
-        require(!done[msg.sender][address(gem)], "token-faucet: already used faucet");
-        require(ERC20Like(gem).balanceOf(address(this)) >= amt[gem], "token-faucet: not enough balance");
-        done[msg.sender][address(gem)] = true;
-        ERC20Like(gem).transfer(msg.sender, amt[gem]);
+    function requestTokens(address token) external {
+        require(!claimed[msg.sender][address(token)], "TokenFaucet: already used faucet");
+        require(ERC20Like(token).balanceOf(address(this)) >= allocatedAmount[token], "TokenFaucet: not enough balance");
+        claimed[msg.sender][address(token)] = true;
+        ERC20Like(token).transfer(msg.sender, allocatedAmount[token]);
     }
 
-    function gulp(address gem, address[] calldata addrs) external {
-        require(ERC20Like(gem).balanceOf(address(this)) >= mul(amt[gem], addrs.length), "token-faucet: not enough balance");
+    function requestTokens(address token, address[] calldata addrs) external {
+        require(ERC20Like(token).balanceOf(address(this)) >= mul(allocatedAmount[token], addrs.length), "TokenFaucet: not enough balance");
 
         for (uint256 i = 0; i < addrs.length; i++) {
-            require(!done[addrs[i]][address(gem)], "token-faucet: already used faucet");
-            done[addrs[i]][address(gem)] = true;
-            ERC20Like(gem).transfer(addrs[i], amt[gem]);
+            require(!claimed[addrs[i]][address(token)], "TokenFaucet: already used faucet");
+            claimed[addrs[i]][address(token)] = true;
+            ERC20Like(token).transfer(addrs[i], allocatedAmount[token]);
         }
     }
 
-    function shut(ERC20Like gem) external auth {
-        gem.transfer(msg.sender, gem.balanceOf(address(this)));
+    function transferAllTokens(ERC20Like token) external isAuthorized {
+        token.transfer(msg.sender, token.balanceOf(address(this)));
     }
 
-    function setAmt(address gem, uint256 amt_) external auth note {
-        amt[gem] = amt_;
+    function setAllocatedAmount(address token, uint256 allocatedAmount_) external isAuthorized emitLog {
+        allocatedAmount[token] = allocatedAmount_;
     }
 }
