@@ -17,26 +17,30 @@
 
 pragma solidity >=0.6.7;
 
-import "./Logging.sol";
-
 interface ERC20Like {
     function balanceOf(address) external view returns (uint256);
     function transfer(address,uint256) external; // return bool?
 }
 
-contract RestrictedTokenFaucet is Logging {
+contract RestrictedTokenFaucet {
     // --- Auth ---
     mapping (address => uint) public authorizedAccounts;
     /**
      * @notice Add auth to an account
      * @param account Account to add auth to
      */
-    function addAuthorization(address account) external emitLog isAuthorized { authorizedAccounts[account] = 1; }
+    function addAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 1;
+        emit AddAuthorization(account);
+    }
     /**
      * @notice Remove auth from an account
      * @param account Account to remove auth from
      */
-    function removeAuthorization(address account) external emitLog isAuthorized { authorizedAccounts[account] = 0; }
+    function removeAuthorization(address account) external isAuthorized {
+        authorizedAccounts[account] = 0;
+        emit RemoveAuthorization(account);
+    }
     /**
     * @notice Checks whether msg.sender can call an authed function
     **/
@@ -46,15 +50,34 @@ contract RestrictedTokenFaucet is Logging {
     }
     // --- Whitelist ---
     mapping (address => uint256) public whitelistedAccounts;
-    function whitelist(address usr) public isAuthorized emitLog { whitelistedAccounts[usr] = 1; }
-    function blacklist(address usr) public isAuthorized emitLog { whitelistedAccounts[usr] = 0; }
+    function whitelist(address usr) public isAuthorized {
+        whitelistedAccounts[usr] = 1;
+        emit Whitelist(usr);
+    }
+    function blacklist(address usr) public isAuthorized {
+        whitelistedAccounts[usr] = 0;
+        emit Blacklist(usr);
+    }
 
     mapping (address => uint256) public allocatedAmount;
     mapping (address => mapping (address => bool)) public claimed;
 
+    // --- Events ---
+    event AddAuthorization(address account);
+    event RemoveAuthorization(address account);
+    event Whitelist(address account);
+    event Blacklist(address account);
+    event RequestTokens(address sender, address token);
+    event RequestTokens(address token, address[] addrs);
+    event TransferAllTokens(address token);
+    event SetAllocatedAmount(address token, uint256 allocatedAmount);
+    event MarkAsUnclaimed(address usr, address token);
+
     constructor () public {
         authorizedAccounts[msg.sender] = 1;
         whitelistedAccounts[msg.sender] = 1;
+        emit AddAuthorization(msg.sender);
+        emit Whitelist(msg.sender);
     }
 
     function mul(uint256 x, uint256 y) internal pure returns (uint256 z) {
@@ -66,11 +89,14 @@ contract RestrictedTokenFaucet is Logging {
         require(!claimed[msg.sender][token], "RestrictedTokenFaucet/already-used_faucet");
         require(ERC20Like(token).balanceOf(address(this)) >= allocatedAmount[token], "RestrictedTokenFaucet/not-enough-balance");
         claimed[msg.sender][token] = true;
+        emit RequestTokens(msg.sender, token);
         ERC20Like(token).transfer(msg.sender, allocatedAmount[token]);
     }
 
     function requestTokens(address token, address[] calldata addrs) external {
         require(ERC20Like(token).balanceOf(address(this)) >= mul(allocatedAmount[token], addrs.length), "RestrictedTokenFaucet/not-enough-balance");
+
+        emit RequestTokens(token, addrs);
 
         for (uint256 i = 0; i < addrs.length; i++) {
             require(whitelistedAccounts[address(0)] == 1 || whitelistedAccounts[addrs[i]] == 1, "RestrictedTokenFaucet/no-whitelist");
@@ -81,14 +107,17 @@ contract RestrictedTokenFaucet is Logging {
     }
 
     function transferAllTokens(ERC20Like token) external isAuthorized {
+        emit TransferAllTokens(address(token));
         token.transfer(msg.sender, token.balanceOf(address(this)));
     }
 
-    function markAsUnclaimed(address usr, address token) external isAuthorized emitLog {
+    function markAsUnclaimed(address usr, address token) external isAuthorized {
         claimed[usr][token] = false;
+        emit MarkAsUnclaimed(usr, token);
     }
 
-    function setAllocatedAmount(address token, uint256 allocatedAmount_) external isAuthorized emitLog {
+    function setAllocatedAmount(address token, uint256 allocatedAmount_) external isAuthorized {
         allocatedAmount[token] = allocatedAmount_;
+        emit SetAllocatedAmount(token, allocatedAmount_);
     }
 }
