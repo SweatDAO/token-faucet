@@ -48,7 +48,7 @@ contract RestrictedTokenFaucetTest is DSTest {
 
     function setUp() public {
         faucet = new RestrictedTokenFaucet();
-        token = new DSToken("TEST");
+        token = new DSToken("TEST", "TEST");
         token.mint(address(faucet), 1000000);
         faucet.setAllocatedAmount(address(token), 20);
         user1 = new FaucetUser(token, faucet);
